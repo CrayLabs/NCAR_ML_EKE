@@ -20,18 +20,28 @@ if gpus:
     tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
 
 
-X_train = np.load('../data/X_train_new.npy')  # .reshape((-1,1,1,10))
-X_test = np.load('../data/X_test_new.npy')  # .reshape((-1,1,1,10))
+X_train = np.load('./data/X_train_new.npy')
+X_test = np.load('./data/X_test_new.npy')
 
-y_train = np.load('../data/y_train_new.npy')
-y_test = np.load('../data/y_test_new.npy')
+y_train = np.load('./data/y_train_new.npy')
+y_test = np.load('./data/y_test_new.npy')
+
+train_samples = X_train.shape[0]
+test_samples = X_test.shape[0]
+
+X_train = X_train[:train_samples//100,:]
+y_train = y_train[:train_samples//100]
+X_test = X_test[:test_samples//100,:]
+y_test = y_test[:test_samples//100]
+
+
 
 igwloss = loss.InverseGaussianWeightedLoss(y_train)
 
 nominal_lr = 0.001
 warmup_epochs = 10
 
-epochs = 100
+epochs = 300
 batch = 512
 lr = nominal_lr * np.sqrt(hvd.size()/8)
 
@@ -51,16 +61,12 @@ def trisched(epoch, lr):
         return lr_max*(1.0-(epoch-warmup_epochs)/(epochs-warmup_epochs+1))
 
 
-loss = 'mse'  # igwloss.compute_loss
+loss_str = 'custom'
+loss_f = igwloss.compute_loss if loss_str is 'custom' else loss_str
+if loss_f is 'custom' and  hvd.rank() == 0:
+  print(str(igwloss))
 
-if isinstance(loss, str):
-  loss_str = loss
-else:
-  if hvd.rank() == 0:
-    print(str(igwloss))
-  loss_str = 'custom'
-
-model = nn_models.build_conv_gen_model(lr=lr, loss=loss)
+model = nn_models.build_conv_gen_model(lr=lr, loss=loss_f)
 
 filename = "_".join([model.name,
                      str(hvd.size()),
@@ -77,7 +83,7 @@ hvd_callback = hvd.callbacks.BroadcastGlobalVariablesCallback(0)
 
 callbacks = [lr_callback, hvd_callback]
 
-steps_per_epoch = min(np.ceil(X_train.shape[0]/(batch*hvd.size())), 3200)
+steps_per_epoch = int(min(np.ceil(X_train.shape[0]/(batch*hvd.size())), 3200))
 
 if hvd.rank() == 0:
     callbacks.append(
