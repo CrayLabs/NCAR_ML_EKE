@@ -29,10 +29,13 @@ y_test = np.load('./data/y_test_new.npy')
 train_samples = X_train.shape[0]
 test_samples = X_test.shape[0]
 
-X_train = X_train[:train_samples//100,:]
-y_train = y_train[:train_samples//100]
-X_test = X_test[:test_samples//100,:]
-y_test = y_test[:test_samples//100]
+# For fast model research
+downsample = 100
+
+X_train = X_train[:train_samples//downsample,:]
+y_train = y_train[:train_samples//downsample]
+X_test = X_test[:test_samples//downsample,:]
+y_test = y_test[:test_samples//downsample]
 
 
 
