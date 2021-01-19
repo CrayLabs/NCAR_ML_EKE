@@ -9,14 +9,15 @@ class pop_data:
     def __init__(self,predictor_path, predictand_path, skip_vars = ['x','y','depth','depth_stdev'], extra_pref = None):
         self.metafile = None
         self.extra_pref = extra_pref
-        self.predictor_inventory = self._generate_inventory(predictor_path,skip_vars)
-        self.predictand_inventory = self._generate_inventory(predictand_path,skip_vars)
+        self.skip_vars = skip_vars
+        self.predictor_inventory = self._generate_inventory(predictor_path)
+        self.predictand_inventory = self._generate_inventory(predictand_path)
         self.predictors = self.predictor_inventory.keys()
         self.predictands = self.predictand_inventory.keys()
         self.extract_meta_vars()
     
     
-    def _generate_inventory(self, datapath, skip_vars):
+    def _generate_inventory(self, datapath):
         """
         Generate a mapping stored in a dictionary between available variables and where they can be found
         Inputs: 
@@ -26,20 +27,67 @@ class pop_data:
         files = [file for file in listdir(datapath) if '.nc' in file]
         # file_prefixes = list(set([ file.split('_')[0] for file in files ]))
         # file_prefixes = list(set([ "_".join(file.split('_')[0:2]) for file in files ]))
-        file_prefixes = list(set([ "_".join(file.split('_')[0:2] + [self.extra_pref]) for file in files ]))
-        
+        if self.extra_pref:
+            file_prefixes = list(set([ "_".join(file.split('_')[0:2] + [self.extra_pref]) for file in files ]))
+        else:
+            file_prefixes = list(set([ "_".join(file.split('_')[0:2]) for file in files ]))
+            
         inventory = {}
         for file_prefix in file_prefixes:
             # fname = path.join(datapath,f'{file_prefix}_file_0001.nc')
-            fname = path.join(datapath,f'{file_prefix}_013_01.nc')
+            if self.extra_pref:
+                fname = path.join(datapath,f'{file_prefix}_013_01.nc')
+            else:
+                fname = path.join(datapath,f'{file_prefix}_01_001.nc')
             if not self.metafile:
                 self.metafile = fname
-            vars = [ var for var in list(Dataset(fname).variables) if var not in skip_vars ]
+            vars = [ var for var in list(Dataset(fname).variables) if var not in self.skip_vars ]
             for var in vars:
                 inventory[var] = {'files': sorted([path.join(datapath,file) 
                                            for file in listdir(datapath) if file_prefix in file])}
         return inventory
 
+        
+    def extend_inventory(self, datapath, variable_type='all'):
+        """
+        Generate a mapping stored in a dictionary between available variables and where they can be found
+        Inputs: 
+            datapath: Path to directory containing outputs from a POP simulation
+        """
+    
+        files = [file for file in listdir(datapath) if '.nc' in file]
+        # file_prefixes = list(set([ file.split('_')[0] for file in files ]))
+        # file_prefixes = list(set([ "_".join(file.split('_')[0:2]) for file in files ]))
+        if self.extra_pref:
+            file_prefixes = list(set([ "_".join(file.split('_')[0:2] + [self.extra_pref]) for file in files ]))
+        else:
+            file_prefixes = list(set([ "_".join(file.split('_')[0:2]) for file in files ]))
+        
+        inventory = {}
+        for file_prefix in file_prefixes:
+            # fname = path.join(datapath,f'{file_prefix}_file_0001.nc')
+            if self.extra_pref:
+                fname = path.join(datapath,f'{file_prefix}_013_01.nc')
+            else:
+                fname = path.join(datapath,f'{file_prefix}_01_001.nc')
+            if not self.metafile:
+                self.metafile = fname
+            vars = [ var for var in list(Dataset(fname).variables) if var not in self.skip_vars ]
+            for var in vars:
+                inventory[var] = {'files': sorted([path.join(datapath,file) 
+                                           for file in listdir(datapath) if file_prefix in file])}
+        
+        if variable_type == 'predictors':
+            self.predictor_inventory = {**self.predictor_inventory, **inventory}
+            self.predictors = self.predictor_inventory.keys()
+        elif variable_type == 'predictands':
+            self.predictand_inventory = {**self.predictand_inventory, **inventory}
+            self.predictands = self.predictand_inventory.keys()
+        else:
+            self.predictor_inventory = {**self.predictor_inventory, **inventory}
+            self.predictors = self.predictor_inventory.keys()
+            self.predictand_inventory = {**self.predictand_inventory, **inventory}
+            self.predictands = self.predictand_inventory.keys()
     
     def extract_meta_vars(self):
         self.x = Dataset(self.metafile).variables['x'][:]

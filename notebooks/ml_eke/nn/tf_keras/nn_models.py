@@ -135,36 +135,51 @@ def trans_residual_block(inputs, filters=256, size=(3, 3)):
     return layers.ReLU()(x)
 
 
-def build_conv_gen_model(lr=0.001, loss='mse'):
+# Use 'M' as size to get larger model, S for small, XS for extrasmall
+def build_conv_gen_model(lr=0.001, loss='mse', size='S',
+                         train_features=X_train_shape_1):
 
-    inputs = layers.Input(shape=(X_train_shape_1,))
+    inputs = layers.Input(shape=(train_features,))
 
-    x = layers.Reshape(target_shape=(1, 1, X_train_shape_1,))(inputs)
+    x = layers.Reshape(target_shape=(1, 1, train_features,))(inputs)
 
-    x = trans_residual_block(x,      filters=X_train_shape_1*2, size=3)
-    x = trans_residual_block(x,      filters=2**(next_pow2(X_train_shape_1*2)),
-                             size=3)
-    x = trans_residual_block(x,      filters=2**(next_pow2(X_train_shape_1*2)),
-                             size=3)
+    x = trans_residual_block(x, filters=X_train_shape_1*2, size=3)
+    # Remove two lines below for XS=
+    if size is not 'XS':
+      x = trans_residual_block(x,
+                               filters=2**(next_pow2(X_train_shape_1*2)),
+                               size=3)
+    # Remove two lines below for S-
+    if not size.endswith('S'):
+      x = trans_residual_block(x,
+                               filters=2**(next_pow2(X_train_shape_1*2)),
+                               size=3)
 
     x = stack3(x, 32, 3, stride1=1, name='stack1')
-    x = layers.MaxPooling2D()(x)
-    x = stack3(x, 64, 3, stride1=1, name='stack2')
+    # Remove two lines below for S-
+    if not size.endswith('S'):
+      x = layers.MaxPooling2D()(x)
+      x = stack3(x, 64, 3, stride1=1, name='stack2')
 
     x = layers.Flatten()(x)
 
-    x = layers.Dense(32, kernel_regularizer=kernel_regularizer_def,
-                     activity_regularizer=activity_regularizer_def,
-                     bias_regularizer=bias_regularizer_def)(x)
+    # Remove three lines below for S-
+
+    if not size.endswith('S'):
+      x = layers.Dense(32, kernel_regularizer=kernel_regularizer_def,
+                       activity_regularizer=activity_regularizer_def,
+                       bias_regularizer=bias_regularizer_def)(x)
+
     x = layers.Dense(8,
                      kernel_regularizer=kernel_regularizer_def,
                      activity_regularizer=activity_regularizer_def,
                      bias_regularizer=bias_regularizer_def)(x)
+
     outputs = layers.Dense(1, kernel_regularizer=kernel_regularizer_def,
                            activity_regularizer=activity_regularizer_def,
                            bias_regularizer=bias_regularizer_def)(x)
 
-    model = keras.Model(inputs=inputs, outputs=outputs, name=f"GEN-INT_l2_{L2}")
+    model = keras.Model(inputs=inputs, outputs=outputs, name=f"{size}-GEN-INT_l2_{L2}")
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr,
                                          clipnorm=0.001)
