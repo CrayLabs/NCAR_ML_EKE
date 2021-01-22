@@ -6,10 +6,11 @@ from sklearn.preprocessing import StandardScaler
 class pop_data:
     """Stores data and metadata of output from POP used to predict eddy kinetic energy"""
     
-    def __init__(self,predictor_path, predictand_path, skip_vars = ['x','y','depth','depth_stdev'], extra_pref = None):
+    def __init__(self,predictor_path, predictand_path, skip_vars = ['x','y','depth','depth_stdev'], extra_pref = None, first_suffix='_013_01.nc'):
         self.metafile = None
         self.extra_pref = extra_pref
         self.skip_vars = skip_vars
+        self.first_suffix = first_suffix
         self.predictor_inventory = self._generate_inventory(predictor_path)
         self.predictand_inventory = self._generate_inventory(predictand_path)
         self.predictors = self.predictor_inventory.keys()
@@ -24,7 +25,7 @@ class pop_data:
             datapath: Path to directory containing outputs from a POP simulation
         """
     
-        files = [file for file in listdir(datapath) if '.nc' in file]
+        files = [file for file in listdir(datapath) if '.nc' in file and not 'xyz' in file]
         # file_prefixes = list(set([ file.split('_')[0] for file in files ]))
         # file_prefixes = list(set([ "_".join(file.split('_')[0:2]) for file in files ]))
         if self.extra_pref:
@@ -34,11 +35,7 @@ class pop_data:
             
         inventory = {}
         for file_prefix in file_prefixes:
-            # fname = path.join(datapath,f'{file_prefix}_file_0001.nc')
-            if self.extra_pref:
-                fname = path.join(datapath,f'{file_prefix}_013_01.nc')
-            else:
-                fname = path.join(datapath,f'{file_prefix}_01_001.nc')
+            fname = path.join(datapath,f'{file_prefix}{self.first_suffix}')
             if not self.metafile:
                 self.metafile = fname
             vars = [ var for var in list(Dataset(fname).variables) if var not in self.skip_vars ]
@@ -65,11 +62,7 @@ class pop_data:
         
         inventory = {}
         for file_prefix in file_prefixes:
-            # fname = path.join(datapath,f'{file_prefix}_file_0001.nc')
-            if self.extra_pref:
-                fname = path.join(datapath,f'{file_prefix}_013_01.nc')
-            else:
-                fname = path.join(datapath,f'{file_prefix}_01_001.nc')
+            fname = path.join(datapath,f'{file_prefix}{self.first_suffix}')
             if not self.metafile:
                 self.metafile = fname
             vars = [ var for var in list(Dataset(fname).variables) if var not in self.skip_vars ]

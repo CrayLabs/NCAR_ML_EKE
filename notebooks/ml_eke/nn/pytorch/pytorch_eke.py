@@ -8,14 +8,17 @@ from torch.utils.data import TensorDataset
 import horovod.torch as hvd
 import numpy as np
 from scipy.stats import norm
+from torchsummary import summary
 import time
 
-from nn_models import EKEResnet, EKETriNet
+from nn_models import EKEResnet, EKETriNet, EKEWideTriNet, EKEResnetSmall
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch EKE Training with HVD')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
+parser.add_argument('--model', type=str, default='resnet', metavar='N',
+                    help='model type (default: resnet)', choices=['resnet', 'resnet_small', 'trinet', 'widetrinet'])
 parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                     help='input batch size for testing (default: 1000)')
 parser.add_argument('--epochs', type=int, default=10, metavar='N',
@@ -60,8 +63,8 @@ def train(epoch):
         if batch_idx % args.log_interval == 0 and rank==0:
             # Horovod: use train_sampler to determine the number of examples in
             # this worker's partition.
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f} - elapsed time: {:.2f}'.format(
-                epoch, (batch_idx+1) * len(data), len(train_sampler),
+            print('{} - Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f} - elapsed time: {:.2f}'.format(
+                model.name, epoch, (batch_idx+1) * len(data), len(train_sampler),
                 100. * (batch_idx+1) / len(train_loader), loss.item(), time.time()-start))
     if rank==0:
         print(f'Epoch time: {time.time()-start}')
@@ -73,10 +76,9 @@ def metric_average(val, name):
     return avg_tensor.item()
 
 
-def test():
+def test(epoch):
     model.eval()
     test_loss = 0.
-    test_err = 0.
     loss_fn = nn.MSELoss(reduction = 'sum')
     for data, target in test_loader:
         if args.cuda:
@@ -84,23 +86,19 @@ def test():
         output = model(data)
         # sum up batch loss
         test_loss += loss_fn(output.squeeze(), target.squeeze()).item()
-        # get the index of the max log-probability
-        test_err += torch.square(output-target).cpu().float().sum()
 
     # Horovod: use test_sampler to determine the number of examples in
     # this worker's partition.
     test_loss /= len(test_sampler)
-    test_err /= len(test_sampler)
 
 
     # Horovod: average metric values across workers.
     test_loss = metric_average(test_loss, 'avg_loss')
-    test_err = metric_average(test_err, 'avg_err')
 
     # Horovod: print output only on first rank.
     if hvd.rank() == 0:
-        print('\nTest set: Average loss: {:.4f}, MSE: {:.4f}\n'.format(
-            test_loss, test_err))
+        print('\n{} - Train epoch: {} test set: Average loss: {:.4f}\n'.format(
+            model.name, epoch, test_loss))
 
 
 def compute_weights(samples):
@@ -141,11 +139,11 @@ if __name__ == '__main__':
             mp._supports_context and 'forkserver' in mp.get_all_start_methods()):
         kwargs['multiprocessing_context'] = 'forkserver'
 
-    X_train = np.load('../data/X_train_all.npy')
-    X_test = np.load('../data/X_test_all.npy')
+    X_train = np.load('../data/X_train_prep.npy')
+    X_test = np.load('../data/X_test_prep.npy')
 
-    y_train = np.load('../data/y_train_all.npy')
-    y_test = np.load('../data/y_test_all.npy')
+    y_train = np.load('../data/y_train_prep.npy')
+    y_test = np.load('../data/y_test_prep.npy')
 
     train_samples = X_train.shape[0]
     train_features = X_train.shape[1]
@@ -196,10 +194,20 @@ if __name__ == '__main__':
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.test_batch_size,
                                               sampler=test_sampler, **kwargs)
 
-    #model = EKETriNet(train_features, 8)
-    #weight_decay = 2e-4
-    model = EKEResnet(train_features)
     weight_decay = 2e-4
+    if args.model.lower() == 'trinet':
+        model = EKETriNet(train_features, 8)
+    elif args.model.lower() == 'resnet':
+        model = EKEResnet(train_features)
+        weight_decay = 2e-3
+    elif args.model.lower() == 'widetrinet':
+        model = EKEWideTriNet(train_features, depth=4, width=8) # best 3x4
+    elif args.model.lower() == 'resnet_small':
+        model = EKEResnetSmall(train_features)
+
+    if rank==0:
+        print(model.name)
+
     if args.weighted_sampling:
         args.lr /= 10.0
 
@@ -243,6 +251,6 @@ if __name__ == '__main__':
         train(epoch)
         if rank==0 and epoch%10 == 0 and epoch>0:
             loss_str = 'custom' if args.weighted_sampling else 'mse'
-            torch.save(model, f'{model.name}-{epoch}_{loss_str}_all.pkl')
-        test()
+            torch.save(model, f'{model.name}-{epoch}_{loss_str}_prep.pkl')
+        test(epoch)
 
