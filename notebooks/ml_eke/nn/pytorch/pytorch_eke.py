@@ -139,11 +139,11 @@ if __name__ == '__main__':
             mp._supports_context and 'forkserver' in mp.get_all_start_methods()):
         kwargs['multiprocessing_context'] = 'forkserver'
 
-    X_train = np.load('../data/X_train_prep.npy')
-    X_test = np.load('../data/X_test_prep.npy')
+    X_train = np.load('../data/X_train_prep_cf23.npy')
+    X_test = np.load('../data/X_test_prep_cf23.npy')
 
-    y_train = np.load('../data/y_train_prep.npy')
-    y_test = np.load('../data/y_test_prep.npy')
+    y_train = np.load('../data/y_train_prep_cf23.npy')
+    y_test = np.load('../data/y_test_prep_cf23.npy')
 
     train_samples = X_train.shape[0]
     train_features = X_train.shape[1]
@@ -245,12 +245,12 @@ if __name__ == '__main__':
 
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr*lr_scaler,
                                                     steps_per_epoch=len(train_loader),
-                                                    epochs=args.epochs, pct_start=10./args.epochs)
+                                                    epochs=args.epochs, pct_start=5./args.epochs)
 
     for epoch in range(1, args.epochs + 1):
         train(epoch)
         if rank==0 and epoch%10 == 0 and epoch>0:
             loss_str = 'custom' if args.weighted_sampling else 'mse'
-            torch.save(model, f'{model.name}-{epoch}_{loss_str}_prep.pkl')
+            torch.save(model, f'{model.name}-{epoch}_{loss_str}_prep_cf23.pkl')
         test(epoch)
 

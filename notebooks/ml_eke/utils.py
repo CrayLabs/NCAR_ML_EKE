@@ -45,24 +45,28 @@ class pop_data:
         return inventory
 
         
-    def extend_inventory(self, datapath, variable_type='all'):
+    def extend_inventory(self, datapath, variable_type='all', extra_pref=None, first_suffix=None):
         """
         Generate a mapping stored in a dictionary between available variables and where they can be found
         Inputs: 
             datapath: Path to directory containing outputs from a POP simulation
         """
-    
+        if extra_pref is None:
+            extra_pref = self.extra_pref
+        if first_suffix is None:
+            first_suffix = self.first_suffix
+            
         files = [file for file in listdir(datapath) if '.nc' in file]
         # file_prefixes = list(set([ file.split('_')[0] for file in files ]))
         # file_prefixes = list(set([ "_".join(file.split('_')[0:2]) for file in files ]))
-        if self.extra_pref:
-            file_prefixes = list(set([ "_".join(file.split('_')[0:2] + [self.extra_pref]) for file in files ]))
+        if extra_pref:
+            file_prefixes = list(set([ "_".join(file.split('_')[0:2] + [extra_pref]) for file in files ]))
         else:
             file_prefixes = list(set([ "_".join(file.split('_')[0:2]) for file in files ]))
         
         inventory = {}
         for file_prefix in file_prefixes:
-            fname = path.join(datapath,f'{file_prefix}{self.first_suffix}')
+            fname = path.join(datapath,f'{file_prefix}{first_suffix}')
             if not self.metafile:
                 self.metafile = fname
             vars = [ var for var in list(Dataset(fname).variables) if var not in self.skip_vars ]
