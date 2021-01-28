@@ -101,6 +101,8 @@ def test(epoch):
             model.name, epoch, test_loss))
 
 
+weight_cap = 100000000
+
 def compute_weights(samples):
     mu, std = norm.fit(samples)
     std_vec = std * torch.ones_like(samples)
@@ -110,8 +112,9 @@ def compute_weights(samples):
     weights = ((std_vec*torch.sqrt(2.0*pi_vec)) *
                torch.exp(0.5*torch.square((samples-mu_vec)/std_vec)))
 
-    print(torch.min(weights), torch.max(weights))
-    weights = torch.clamp(weights, 0, 1000)
+    if rank==0:
+        print(f'min weight: {torch.min(weights)}, max weight: {torch.max(weights)}')
+    weights = torch.clamp(weights, 0, weight_cap)
 
     return weights
 
@@ -139,11 +142,11 @@ if __name__ == '__main__':
             mp._supports_context and 'forkserver' in mp.get_all_start_methods()):
         kwargs['multiprocessing_context'] = 'forkserver'
 
-    X_train = np.load('../data/X_train_prep_cf23.npy')
-    X_test = np.load('../data/X_test_prep_cf23.npy')
+    X_train = np.load('../data/X_train_cf_all.npy')
+    X_test = np.load('../data/X_test_cf_all.npy')
 
-    y_train = np.load('../data/y_train_prep_cf23.npy')
-    y_test = np.load('../data/y_test_prep_cf23.npy')
+    y_train = np.load('../data/y_train_cf_all.npy')
+    y_test = np.load('../data/y_test_cf_all.npy')
 
     train_samples = X_train.shape[0]
     train_features = X_train.shape[1]
@@ -250,7 +253,7 @@ if __name__ == '__main__':
     for epoch in range(1, args.epochs + 1):
         train(epoch)
         if rank==0 and epoch%10 == 0 and epoch>0:
-            loss_str = 'custom' if args.weighted_sampling else 'mse'
-            torch.save(model, f'{model.name}-{epoch}_{loss_str}_prep_cf23.pkl')
+            loss_str = 'custom'+str(weight_cap) if args.weighted_sampling else 'mse'
+            torch.save(model, f'{model.name}-{epoch}_{loss_str}_cf_all.pkl')
         test(epoch)
 

@@ -56,7 +56,7 @@ class pop_data:
         if first_suffix is None:
             first_suffix = self.first_suffix
             
-        files = [file for file in listdir(datapath) if '.nc' in file]
+        files = [file for file in listdir(datapath) if '.nc' in file and not 'xyz' in file]
         # file_prefixes = list(set([ file.split('_')[0] for file in files ]))
         # file_prefixes = list(set([ "_".join(file.split('_')[0:2]) for file in files ]))
         if extra_pref:
