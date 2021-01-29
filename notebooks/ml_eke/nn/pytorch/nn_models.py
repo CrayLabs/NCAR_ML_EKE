@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 from typing import Type, Union, List, Optional, Tuple
-from torch.nn.functional import silu
+from torch.nn.functional import relu
 
 from torchvision.models.resnet import BasicBlock, Bottleneck, conv1x1
 
@@ -79,11 +79,11 @@ class EKETriNet(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         xs = [x]
         for i in range(1, self.depth+1):
-            x = silu(self.trilayers[i-1](x))
+            x = relu(self.trilayers[i-1](x))
             xs = xs + [x]
         
         for i in range(self.depth):
-            x = silu(self.trilayers[i+self.depth](x) + xs[self.depth-i-1])
+            x = relu(self.trilayers[i+self.depth](x) + xs[self.depth-i-1])
 
         x = self.fc(x)
         
@@ -115,7 +115,7 @@ class EKEWideTriNet(nn.Module):
         for i in range(self.width):
             xs = torch.cat((xs, self.trinets[i](x)), 1)
 
-        x = self.fc(silu(xs))
+        x = self.fc(relu(xs))
         return x
 
 class EKEResnet(nn.Module):
