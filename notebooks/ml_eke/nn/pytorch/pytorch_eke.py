@@ -10,14 +10,14 @@ import numpy as np
 from scipy.stats import norm
 import time
 
-from nn_models import EKEResnet, EKETriNet, EKEWideTriNet, EKEResnetSmall
+from nn_models import EKEResnet, EKETriNet, EKEWideTriNet, EKEResnetSmall, EKEResnetExtraSmall, EKECNN
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch EKE Training with HVD')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
 parser.add_argument('--model', type=str, default='resnet', metavar='N',
-                    help='model type (default: resnet)', choices=['resnet', 'resnet_small', 'trinet', 'widetrinet'])
+                    help='model type (default: resnet)', choices=['cnn', 'resnet', 'resnet_small', 'resnet_extrasmall', 'trinet', 'widetrinet'])
 parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                     help='input batch size for testing (default: 1000)')
 parser.add_argument('--epochs', type=int, default=10, metavar='N',
@@ -113,7 +113,7 @@ def compute_weights(samples):
 
     if rank==0:
         print(f'min weight: {torch.min(weights)}, max weight: {torch.max(weights)}')
-    weights = torch.clamp(weights, 0, weight_cap)
+    #weights = torch.clamp(weights, 0, weight_cap)
 
     return weights
 
@@ -141,11 +141,11 @@ if __name__ == '__main__':
             mp._supports_context and 'forkserver' in mp.get_all_start_methods()):
         kwargs['multiprocessing_context'] = 'forkserver'
 
-    X_train = np.load('../data/X_train_cf_all_4_feat.npy')
-    X_test = np.load('../data/X_test_cf_all_4_feat.npy')
+    X_train = np.load('../data/X_train_cf_all_4_noslope.npy')
+    X_test = np.load('../data/X_test_cf_all_4_noslope.npy')
 
-    y_train = np.load('../data/y_train_cf_all_4_feat.npy')
-    y_test = np.load('../data/y_test_cf_all_4_feat.npy')
+    y_train = np.load('../data/y_train_cf_all_4_noslope.npy')
+    y_test = np.load('../data/y_test_cf_all_4_noslope.npy')
 
     train_samples = X_train.shape[0]
     train_features = X_train.shape[1]
@@ -198,14 +198,21 @@ if __name__ == '__main__':
 
     weight_decay = 2e-4
     if args.model.lower() == 'trinet':
-        model = EKETriNet(train_features, 8)
+        model = EKETriNet(train_features, 3)
     elif args.model.lower() == 'resnet':
         model = EKEResnet(train_features)
         weight_decay = 2e-3
     elif args.model.lower() == 'widetrinet':
-        model = EKEWideTriNet(train_features, depth=4, width=8) # best 3x4
+        model = EKEWideTriNet(train_features, depth=3, width=4) # best 3x4
     elif args.model.lower() == 'resnet_small':
         model = EKEResnetSmall(train_features)
+        weight_decay = 2e-3
+    elif args.model.lower() == 'resnet_extrasmall':
+        model = EKEResnetExtraSmall(train_features)
+        weight_decay = 2e-4
+    elif args.model.lower() == 'cnn':
+        model = EKECNN(train_features, groups=2, width_per_group=8)
+        weight_decay = 2e-5
 
     if rank==0:
         print(model.name)
@@ -252,7 +259,7 @@ if __name__ == '__main__':
     for epoch in range(1, args.epochs + 1):
         train(epoch)
         if rank==0 and epoch%10 == 0 and epoch>0:
-            loss_str = 'custom'+str(weight_cap) if args.weighted_sampling else 'mse'
-            torch.save(model, f'{model.name}-{epoch}_{loss_str}_cf_all_4_feat.pkl')
+            loss_str = 'custom' if args.weighted_sampling else 'mse'
+            torch.save(model, f'{model.name}-{epoch}_{loss_str}_cf_all_4_noslope.pkl')
         test(epoch)
 
