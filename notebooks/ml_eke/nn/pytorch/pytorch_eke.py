@@ -141,11 +141,11 @@ if __name__ == '__main__':
             mp._supports_context and 'forkserver' in mp.get_all_start_methods()):
         kwargs['multiprocessing_context'] = 'forkserver'
 
-    X_train = np.load('../data/X_train_cf_all_4_noslope.npy')
-    X_test = np.load('../data/X_test_cf_all_4_noslope.npy')
+    X_train = np.load('../data/X_train_cf_all_4.npy')
+    X_test = np.load('../data/X_test_cf_all_4.npy')
 
-    y_train = np.load('../data/y_train_cf_all_4_noslope.npy')
-    y_test = np.load('../data/y_test_cf_all_4_noslope.npy')
+    y_train = np.load('../data/y_train_cf_all_4.npy')
+    y_test = np.load('../data/y_test_cf_all_4.npy')
 
     train_samples = X_train.shape[0]
     train_features = X_train.shape[1]
@@ -260,6 +260,6 @@ if __name__ == '__main__':
         train(epoch)
         if rank==0 and epoch%10 == 0 and epoch>0:
             loss_str = 'custom' if args.weighted_sampling else 'mse'
-            torch.save(model, f'{model.name}-{epoch}_{loss_str}_cf_all_4_noslope.pkl')
+            torch.save(model, f'{model.name}-{epoch}_{loss_str}_cf_all_4.pkl')
         test(epoch)
 
