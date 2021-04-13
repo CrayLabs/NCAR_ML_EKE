@@ -1,4 +1,7 @@
 
+
+[![Input Dataset DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4682270.svg)](https://doi.org/10.5281/zenodo.4682270)
+
 # Using Machine Learning at Scale in HPC Simulations with SmartSim
 
 This project is code for the paper: Using Machine Learning at Scale in HPC Simulations with SmartSim
@@ -66,7 +69,12 @@ and try the script again.
 We host and include the input data we used to run MOM6 along with
 pre-trained models and scripts we used for the paper.
 
-To download the data, (steps to come)
+To download the data, either at the DOI link at the top
+of the repo or [here](https://doi.org/10.5281/zenodo.4682270)
+
+Download the data into ``MOM6/INPUT``. The MOM6 input dataset
+pretrained models and scripts for the SmartSim workload are all
+included.
 
 ## Run
 
