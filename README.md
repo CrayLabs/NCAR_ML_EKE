@@ -23,14 +23,15 @@ First, clone the repository with the MOM6 submodule
 ```bash
 git clone --recursive https://github.com/CrayLabs/NCAR_ML_EKE.git
 ```
-Next you need to install SmartSim 0.3.0 and SmartRedis 0.1.0 with
+Next you need to install [SmartSim 0.3.0](https://github.com/CrayLabs/SmartSim/tree/v0.3.0)
+and [SmartRedis 0.1.0](https://github.com/CrayLabs/SmartRedis/tree/v0.1.0) with
 dependencies. We provide the capability to run this use case on
 CPU or GPU-enabled nodes. Please be sure to build SmartSim accordingly.
 
 Note: There is a ``env`` file in ``MOM6/build/gnu`` that specifies
 the programming environment we built with. Specifically, we used
 the GNU toolchain with gcc 8.3.1. Source this before building 
-anything (if you are on a Cray or HPC system with modules)
+anything (if you are on a Cray or HPC system with modules).
 
 Follow the [instructions for the full installation](https://www.craylabs.org/build/html/installation.html#full-installation) of
 both libraries and be sure to build for the architecture you
@@ -69,8 +70,8 @@ and try the script again.
 We host and include the input data we used to run MOM6 along with
 pre-trained models and scripts we used for the paper.
 
-To download the data, either at the DOI link at the top
-of the repo or [here](https://doi.org/10.5281/zenodo.4682270)
+You can download the data, either at the DOI link at the top
+of the repo or [here](https://doi.org/10.5281/zenodo.4682270).
 
 Download the data into ``MOM6/INPUT``. The MOM6 input dataset
 pretrained models and scripts for the SmartSim workload are all
@@ -82,17 +83,17 @@ Before running the SmartSim driver script, be sure that
 the computational setup described by the script suits your
 system. 
 
-This script assumes launching on a slurm cluster
+This script assumes launching on a Slurm cluster
 with at least
    - 228 CPU nodes with 96 cpus (including hyperthreads)
    - 16 nodes with P100 GPUs and 36 cpu cores (including hyperthreads)
 
 This can be changed to suit your system with the parameters
-listed below
+listed below.
 
 To run the exact same experiment as our paper, increase
 the time in both batch jobs and the number of days
-to 10 years. This is hopefully obvious how to do in the
+to 10 years. It is hopefully obvious how to do this in the
 script.
 
 Once configured, the entire workload can be executed with
@@ -104,7 +105,7 @@ python driver.py
 
 Note: this will submit two batch allocations to the scheduler
 of large size if configurations are not changed. To add account
-or other information please consult the [SmartSim API Docs](https://www.craylabs.org/build/html/api/smartsim_api.html#smartsim-api)
+or other information please consult the [SmartSim API Docs](https://www.craylabs.org/build/html/api/smartsim_api.html#smartsim-api).
 
 ## Results
 
@@ -119,16 +120,16 @@ which look like
 (SmartRedis unpack tensor )           0.001292      0.011080      0.001756      0.000605  0.000    41     0   909
 ```
 You can use these to examine the overall timings of each operation that uses 
-SmartRedis inside MOM6
+SmartRedis inside MOM6.
 
 ## Variants
 
 Below are some variants that can be run for examining different
-configurations or for different systems
+configurations or for different systems.
 
 ### Reference Simulation
 
-The compare the SmartSim approach vs the MEKE paramterization, 
+The compare the SmartSim approach vs the MEKE parameterization, 
 change the line in ``MOM6/OM4_025/MOM_override`` from
 
 ``EKE_SOURCE='sr'``
@@ -138,8 +139,8 @@ to
 Then comment out the parts of the driver script that create
 and launch the database. Once commented out, you can run the
 driver script as normal and the MOM6 simulations will be
-executed with the MEKE paramterization instead of the
-Smartsim approach.
+executed with the MEKE parameterization instead of the
+SmartSim approach.
 
 ### CPU-only Machines
 
