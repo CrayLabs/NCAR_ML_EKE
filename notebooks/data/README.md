@@ -1,3 +1,3 @@
 # NCAR EKE DATA
 
-In this directory, you should unpack the tarballs containing the training/validation data (two $1/10\circ$ datasets, one containing sea surface height information) and the verification data (the $2/3\circ$ and $1/4\circ$ datasets). [You can obtain all datasets here] (https://): the tarball contains the four datasets as separate tarballs. The notebooks expect to find the datasets here. If you store them in another path, just change the corresponding variables in the notebooks.
+In this directory, you should unpack the tarballs containing the training/validation data (two 1/10° datasets, one containing sea surface height information) and the verification data (the 2/3° and 1/4° datasets). [You can obtain all datasets here] (https://): the tarball contains the four datasets as separate tarballs. The notebooks expect to find the datasets here. If you store them in another path, just change the corresponding variables in the notebooks.
