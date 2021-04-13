@@ -1,5 +1,5 @@
 
-# SmartSim-Enabled MOM6 Simulation with ML EKE Parameterization 
+# Using Machine Learning at Scale in HPC Simulations with SmartSim
 
 This project is code for the paper: Using Machine Learning at Scale in HPC Simulations with SmartSim
 
