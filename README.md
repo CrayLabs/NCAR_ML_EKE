@@ -81,18 +81,19 @@ export SMARTREDIS_INSTALL_PATH=$(pwd)/install
 ### Build MOM6
 
 Assuming you checked out the repository, built and installed
-SmartSim and SmartRedis, you now need to build MOM6. A script
-is included for the compilation.
+SmartSim and SmartRedis, you now need to build MOM6.
 
-```bash
-cd NCAR_ML_EKE/MOM6/src/MOM6/src
-ln -s $SMARTREDIS_INSTALL_PATH/../src/fortran/ ./smartredis
-cd ../../../
-./compile_ice_ocean_SIS2.sh
-```
-Go grab a coffee and wait for that to complete. 
+Follow the [Getting Started](https://github.com/NOAA-GFDL/MOM6-examples/wiki/Getting-started)
+portion of the MOM6-examples wiki for compiling and running the
+MOM6-SIS2 coupled model. Please be sure to replace the MOM6 directory
+from this repository in MOM6-examples/src/MOM6
 
-### Download the MOM6 input data
+In the
+[Downloading input data](https://github.com/NOAA-GFDL/MOM6-examples/wiki/Getting-started#downloading-input-data)
+section, make sure to download the ``OM4_025``, ``obs``, and ``CORE``
+directories.
+
+### Download the SmartSim-MOM6 input data
 
 We host and include the input data we used to run MOM6 along with
 pre-trained models and scripts we used for the paper.
@@ -102,7 +103,10 @@ of the repo or [here](https://doi.org/10.5281/zenodo.4682270)
 
 Download the data into ``MOM6/INPUT``. The MOM6 input dataset
 pretrained models and scripts for the SmartSim workload are all
-included.
+included. Replace the hidden ``.datasets`` symlink to the directory
+where you downloaded the MOM6 input data.
+
+Copy the executable built previously into the MOM6 directory.
 
 ## Run
 
