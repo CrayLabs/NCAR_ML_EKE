@@ -1,17 +1,6 @@
 """
 Driver script for the execution of SmartSim enabled
-MOM6 simulations with the OM4_05 configuration.
-
-Note: certain parameters and calls will need to
-be updated depending on the resources of the
-system.
-
-This script assumes launching on a slurm cluster
-with at least
-   - 228 CPU nodes with 96 cpus (including hyperthreads)
-   - 16 nodes with P100 GPUs and 36 cpu cores
-This can be changed to suit your system with the parameters
-listed below
+MOM6 simulations with the OM4_025 configuration.
 
 To run the exact same experiment as our paper, increase
 the time in both batch jobs and the number of days
@@ -20,81 +9,176 @@ to 10 years.
 
 from glob import glob
 from smartsim import Experiment
-from smartsim.settings import SbatchSettings, SrunSettings
-from smartsim.database import SlurmOrchestrator
-from smartsim.utils.log import log_to_file
+from smartsim.database import Orchestrator
+from smartsim.log import log_to_file
 
-# logging output saved to file
-log_to_file("./driver.log")
 
-# experiment parameters
-DB_NODES = 16
-ENSEMBLE_NODES = 228
-ENSEMBLE_MEMBERS = 12
-MOM6_EXE = "/lus/cls01029/spartee/poseidon/NCAR_ML_EKE/MOM6/build/gnu/ice_ocean_SIS2/repro/MOM6"
+def create_mom_ensemble( experiment, mom6_exe_path, ensemble_size, nodes_per_member, constraints ):
+    """Creates the ensemble object that stores all configuration options
+    """
 
-# name of experiment where output will be placed
-experiment = Experiment("AI-EKE-MOM6", launcher="slurm")
-
-# define slurm execution settings for a single member
-# of the ensemble
-mom_opts= {
-    "nodes": 19,
-    "ntasks": 910,
-    "exclusive": None,
-}
-mom_settings = SrunSettings(MOM6_EXE, run_args=mom_opts)
-
-# define batch parameters for entire ensemble
-batch_opts = {
-    "mincpus": 96,
-    "ntasks-per-node": 48,
-    "exclusive": None
-}
-ensemble_batch = SbatchSettings(nodes=ENSEMBLE_NODES, time="10:00:00", batch_args=batch_opts)
-
-# create reference to MOM6 ensemble
-mom_ensemble = experiment.create_ensemble("MOM",
-                                          batch_settings=ensemble_batch,
-                                          run_settings=mom_settings,
-                                          replicas=ENSEMBLE_MEMBERS)
-
-# Attach input files and configuration files to each
-# MOM6 simulation
-mom_ensemble.attach_generator_files(
-    to_configure=glob("../MOM6/MOM6_config/*"),
-    to_copy="../MOM6/OM4_025",
-    to_symlink="../MOM6/INPUT",
-)
-
-# configs to write into 'to_configure' files listed
-# above. If you change the number of processors for
-# each MOM6 simulation, you will need to change this.
-MOM6_config = {
-    "SIM_DAYS": 1, # length of simlations 
-    "DOMAIN_LAYOUT": "32,36",
-    "MASKTABLE": "mask_table.242.32x36"
+    mom6_batch_args = {
+        "C":constraints,
+        "exclusive": None
     }
-for model in mom_ensemble:
-    model.params = MOM6_config
 
-# register models so keys don't overwrite each other
-# in the database
-for model in mom_ensemble:
-    model.register_incoming_entity(model)
+    ensemble_batch_settings = experiment.create_batch_settings(
+        nodes=ensemble_size*nodes_per_member,
+        time="1:00:00",
+        batch_args = mom6_batch_args
+    )
 
-# creation of ML database specific to Slurm.
-# there are also PBS, Cobalt, and local variants
-db = SlurmOrchestrator(db_nodes=DB_NODES, time="10:00:00", threads_per_queue=4)
-db.set_cpus(36)
-db.set_batch_arg("constraint", "P100")
-db.set_batch_arg("exclusive", None)
+    mom6_run_args = {
+        "nodes"  : nodes_per_member,
+        "ntasks" : 480, # This number must match the ranks in MASKTABLE below
+        "exclusive": None
+    }
 
-# generate run directories and write configurations
-experiment.generate(mom_ensemble, db, overwrite=True)
+    mom6_run_settings = experiment.create_run_settings(
+        mom6_exe_path,
+        run_command = "srun",
+        run_args = mom6_run_args
+    )
 
-# start the database and ensemble batch jobs.
-experiment.start(mom_ensemble, db, summary=True)
+    mom_ensemble = experiment.create_ensemble(
+        "MOM",
+        batch_settings = ensemble_batch_settings,
+        run_settings   = mom6_run_settings,
+        replicas       = ensemble_size
+    )
 
-# print a summary of the run.
-print(experiment.summary())
+    mom_ensemble.attach_generator_files(
+        to_configure=glob("../MOM6/MOM6_config/*"),
+        to_copy="../MOM6/OM4_025",
+        to_symlink="/lus/cls01029/shao/dev/gfdl/MOM6-examples/ice_ocean_SIS2/OM4_025/INPUT"
+    )
+
+    return mom_ensemble
+
+def configure_mom_ensemble( ensemble ):
+    MOM6_config_options = {
+        "SIM_DAYS": 1, # length of simlations
+        "DOMAIN_LAYOUT": "32,18",
+        "MASKTABLE": "mask_table.96.32x18"
+    }
+    for model in ensemble:
+        model.params = MOM6_config_options
+
+    return ensemble
+
+def add_colocated_orchestrator( ensemble, port, interface ):
+    for model in ensemble:
+        model.colocate_db(port, ifname=interface)
+
+def create_distributed_orchestrator( nodes, port, interface, node_features ):
+    orchestrator = Orchestrator(
+        port = port,
+        interface = interface,
+        db_nodes=nodes,
+        time="1:00:00",
+        threads_per_queue=4,
+        launcher='slurm',
+        batch=True)
+    orchestrator.set_cpus(36)
+    orchestrator.set_batch_arg("constraint",node_features)
+    orchestrator.set_batch_arg("exclusive",None)
+    return orchestrator
+
+def driver( args ):
+    log_to_file("./driver.log")
+
+    experiment = Experiment("AI-EKE-MOM6", launcher="slurm")
+    mom_ensemble = create_mom_ensemble(
+        experiment,
+        args.mom6_exe_path,
+        args.ensemble_size,
+        args.nodes_per_member,
+        args.ensemble_node_features
+    )
+    configure_mom_ensemble(mom_ensemble)
+
+    experiment_entities = [ mom_ensemble ] # This list holds all the entities to start
+
+    if args.colocated_orchestrator:
+        add_colocated_orchestrator(mom_ensemble)
+    else:
+        orchestrator = create_distributed_orchestrator(
+            args.orchestrator_nodes,
+            args.orchestrator_port,
+            args.orchestrator_interface,
+            args.orchestrator_node_features
+        )
+        experiment_entities.append(orchestrator)
+
+    experiment.generate( *experiment_entities, overwrite=True )
+    experiment.start( *experiment_entities, summary=True )
+    print(experiment.summary())
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Run MOM6 online inference example using the Slurm launcher")
+    # MOM6 related settings
+    parser.add_argument(
+        "--ensemble_size",
+        type=int,
+        default=1,
+        help="Number of ensemble members"
+    )
+    parser.add_argument(
+        "--nodes_per_member",
+        type=int,
+        default=14,
+        help="Number of nodes for each ensemble member"
+    )
+    parser.add_argument(
+        "--ppn_per_member",
+        type=int,
+        default=36,
+        help="Number of processors per node for each ensemble member"
+    )
+    parser.add_argument(
+        "--mom6_exe_path",
+        type=str,
+        default="/lus/cls01029/spartee/poseidon/NCAR_ML_EKE/MOM6/build/gnu/ice_ocean_SIS2/repro/MOM6",
+        help="Location of the MOM6 executable"
+    )
+    parser.add_argument(
+        "--ensemble_node_features",
+        type=str,
+        default='CL48',
+        help="The node features requested for the simulation model. Follows the slurm convention for specifying constraints"
+    )
+
+    # Orchestrator options
+    parser.add_argument("--orchestrator_nodes",
+                        type=int,
+                        default=3,
+                        help="Number of nodes for the database"
+    )
+    parser.add_argument("--orchestrator_port",
+                        type=int,
+                        default=6780,
+                        help="Port for the database"
+    )
+    parser.add_argument("--orchestrator_interface",
+                        type=str,
+                        default="ipogif0",
+                        help="Network interface for the database"
+    )
+    parser.add_argument("--colocated_orchestrator",
+                        action='store_true',
+                        dest='colocated_orchestrator',
+                        help="If present, run the orchestrator in co-located mode"
+    )
+    parser.add_argument(
+        "--orchestrator_node_features",
+        type=str,
+        default='P100',
+        help="The node features requested for the orchestrator. Follows the slurm convention for specifying constraints"
+    )
+    args = parser.parse_args()
+
+    driver( args )
+
+
+
