@@ -13,7 +13,7 @@ from smartsim.database import Orchestrator
 from smartsim.log import log_to_file
 
 
-def create_mom_ensemble( experiment, mom6_exe_path, ensemble_size, nodes_per_member, constraints ):
+def create_mom_ensemble( experiment, mom6_exe_path, ensemble_size, nodes_per_member, ppn_per_member, constraints ):
     """Creates the ensemble object that stores all configuration options
     """
 
@@ -30,7 +30,7 @@ def create_mom_ensemble( experiment, mom6_exe_path, ensemble_size, nodes_per_mem
 
     mom6_run_args = {
         "nodes"  : nodes_per_member,
-        "ntasks" : 480, # This number must match the ranks in MASKTABLE below
+        "ntasks" : nodes_per_member*ppn_per_member, # This number must match the ranks in MASKTABLE below
         "exclusive": None
     }
 
@@ -58,6 +58,11 @@ def create_mom_ensemble( experiment, mom6_exe_path, ensemble_size, nodes_per_mem
 def configure_mom_ensemble( ensemble ):
     MOM6_config_options = {
         "SIM_DAYS": 1, # length of simlations
+        # "DOMAIN_LAYOUT": "32,18",
+        # "MASKTABLE": "mask_table.96.32x18"
+        "EKE_MODEL_NAME":"ncar_ml_eke.gpu.pt",
+        "SMARTREDIS_COLOCATED":"True",
+        "SMARTREDIS_COLOCATED_STRIDE":18,
         "DOMAIN_LAYOUT": "32,18",
         "MASKTABLE": "mask_table.96.32x18"
     }
@@ -68,7 +73,7 @@ def configure_mom_ensemble( ensemble ):
 
 def add_colocated_orchestrator( ensemble, port, interface ):
     for model in ensemble:
-        model.colocate_db(port, ifname=interface)
+        model.colocate_db(port, ifname=interface, limit_app_cpus=False)
 
 def create_distributed_orchestrator( nodes, port, interface, node_features ):
     orchestrator = Orchestrator(
@@ -85,7 +90,7 @@ def create_distributed_orchestrator( nodes, port, interface, node_features ):
     return orchestrator
 
 def driver( args ):
-    log_to_file("./driver.log")
+    log_to_file("./driver.log", log_level='developer')
 
     experiment = Experiment("AI-EKE-MOM6", launcher="slurm")
     mom_ensemble = create_mom_ensemble(
@@ -93,6 +98,7 @@ def driver( args ):
         args.mom6_exe_path,
         args.ensemble_size,
         args.nodes_per_member,
+        args.ppn_per_member,
         args.ensemble_node_features
     )
     configure_mom_ensemble(mom_ensemble)
@@ -100,7 +106,10 @@ def driver( args ):
     experiment_entities = [ mom_ensemble ] # This list holds all the entities to start
 
     if args.colocated_orchestrator:
-        add_colocated_orchestrator(mom_ensemble)
+        add_colocated_orchestrator(
+            mom_ensemble,
+            args.orchestrator_port,
+            args.orchestrator_interface )
     else:
         orchestrator = create_distributed_orchestrator(
             args.orchestrator_nodes,
@@ -113,6 +122,7 @@ def driver( args ):
     experiment.generate( *experiment_entities, overwrite=True )
     experiment.start( *experiment_entities, summary=True )
     print(experiment.summary())
+    experiment.stop()
 
 if __name__ == "__main__":
     import argparse
@@ -138,8 +148,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--mom6_exe_path",
+        default="/lus/cls01029/shao/dev/gfdl/MOM6-examples/build/gnu/ice_ocean_SIS2/repro/MOM6",
         type=str,
-        default="/lus/cls01029/spartee/poseidon/NCAR_ML_EKE/MOM6/build/gnu/ice_ocean_SIS2/repro/MOM6",
         help="Location of the MOM6 executable"
     )
     parser.add_argument(
