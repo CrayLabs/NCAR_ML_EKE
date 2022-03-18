@@ -1,0 +1,9 @@
+! Blank file in which we can put "overrides" for parameters
+!VERBOSITY = 9
+EKE_SOURCE='silc'
+SILC_MODEL='ncar_ml_eke.gpu.pt'
+SILC_PREPROCESS_SCRIPT='ml_processing.txt'
+MEKE_COLD_START = True
+#override MEKE_GEOMETRIC = True
+MEKE_GEOMETRIC_ALPHA = 0.07
+#override MEKE_KHTH_FAC = 1.

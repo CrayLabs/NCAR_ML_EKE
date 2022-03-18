@@ -1,0 +1,13 @@
+OM4_SIS2_cgrid_025
+1900 1 1 0 0 0
+
+"ocean_daily",            1, "days",   1, "days", "time"
+
+ "ocean_model",   "MEKE",          "MEKE",              "ocean_daily",         "all", "mean", "none",2
+ "ocean_model",   "MEKE_MKE",          "MEKE_MKE",              "ocean_daily",         "all", "mean", "none",2
+# "ocean_model",   "MEKE_slope_x",          "MEKE_slope_x",              "ocean_daily",         "all", "mean", "none",2
+# "ocean_model",   "MEKE_slope_y",          "MEKE_slope_y",              "ocean_daily",         "all", "mean", "none",2
+# "ocean_model",   "MEKE_slope_z",          "MEKE_slope_z",              "ocean_daily",         "all", "mean", "none",2
+ "ocean_model",   "MEKE_RV",          "MEKE_RV",              "ocean_daily",         "all", "mean", "none",2
+ "ocean_model",   "KHTH_u",          "KHTH_u",              "ocean_daily",         "all", "mean", "none",2
+ "ocean_model",   "MEKE_KH",          "MEKE_KH",              "ocean_daily",         "all", "mean", "none",2
