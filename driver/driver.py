@@ -11,60 +11,72 @@ from glob import glob
 from smartsim import Experiment
 from smartsim.database import Orchestrator
 from smartsim.log import log_to_file
+import warnings
 
+def create_mom_ensemble(
+        experiment,
+        walltime,
+        ensemble_size,
+        nodes_per_member,
+        tasks_per_node,
+        mom6_exe_path,
+        ensemble_node_features=None
+    ):
 
-def create_mom_ensemble( experiment, args ):
-    """Creates the ensemble object that stores all configuration options
-    """
+    if experiment._launcher == 'slurm' and ensemble_node_features:
+        mom6_batch_args = {
+            "C":ensemble_node_features,
+        }
+    else:
+        warnings.warn(
+            "ensemble_node_features was set, but the launcher is not slurm."+
+            "Ignoring this option"
+        )
 
-    mom6_batch_args = {
-        "C":args.ensemble_node_features,
-        "exclusive": None
-    }
+        mom6_batch_args = None
 
     ensemble_batch_settings = experiment.create_batch_settings(
-        nodes=args.ensemble_size*args.nodes_per_member,
-        time="1:00:00",
+        nodes      = ensemble_size*nodes_per_member,
+        time       = walltime,
         batch_args = mom6_batch_args
     )
 
-    mom6_run_args = {
-        "nodes"  : args.nodes_per_member,
-        "ntasks" : args.nodes_per_member*args.ppn_per_member,
-        "exclusive": None
-    }
-
-    mom6_run_settings = experiment.create_run_settings(
-        args.mom6_exe_path,
-        run_command = "srun",
-        run_args = mom6_run_args
-    )
+    mom6_run_settings = experiment.create_run_settings(mom6_exe_path)
+    mom6_run_settings.set_tasks_per_node(tasks_per_node)
+    mom6_run_settings.set_tasks(nodes_per_member*tasks_per_node)
 
     mom_ensemble = experiment.create_ensemble(
         "MOM",
         batch_settings = ensemble_batch_settings,
         run_settings   = mom6_run_settings,
-        replicas       = args.ensemble_size
+        replicas       = ensemble_size
     )
 
     mom_ensemble.attach_generator_files(
         to_configure=glob("../MOM6_config/configurable_files/*"),
         to_copy="../MOM6_config/OM4_025",
-        to_symlink="/lus/cls01029/shao/dev/gfdl/MOM6-examples/ice_ocean_SIS2/OM4_025/INPUT"
+        to_symlink="../MOM6_config/INPUT"
     )
 
     return mom_ensemble
 
-def configure_mom_ensemble( ensemble, args, colocated_orchestrator, db_nodes ):
-    """Configures all the members of the MOM6 ensemble with runtime configureable parameters
-    """
+def configure_mom_ensemble(
+    ensemble,
+    colocated_orchestrator,
+    clustered_orchestrator,
+    mask_table,
+    domain_layout,
+    eke_model_name,
+    eke_backend,
+    colocated_stride=0
+    ):
 
     MOM6_config_options = {
         "SIM_DAYS": 1, # length of simlations
-        "EKE_MODEL": args.eke_model_name,
-        "EKE_BACKEND": args.eke_backend,
-        "DOMAIN_LAYOUT": args.domain_layout,
-        "MASKTABLE": args.mask_table
+        "EKE_MODEL": eke_model_name,
+        "EKE_BACKEND": eke_backend,
+        "DOMAIN_LAYOUT": domain_layout,
+        "MASKTABLE": mask_table
     }
     # For now the next entries have to be there to avoid the generator bug
     MOM6_config_options.update( {
@@ -76,9 +88,9 @@ def configure_mom_ensemble( ensemble, args, colocated_orchestrator, db_nodes ):
     if colocated_orchestrator:
         MOM6_config_options.update( {
         "SMARTREDIS_COLOCATED":"True",
-        "SMARTREDIS_COLOCATED_STRIDE":18,
+        "SMARTREDIS_COLOCATED_STRIDE":colocated_stride,
         })
-    elif db_nodes >= 3:
+    if clustered_orchestrator:
         MOM6_config_options.update( {'SMARTREDIS_CLUSTER':'True'} )
 
     for model in ensemble:
@@ -87,188 +99,221 @@ def configure_mom_ensemble( ensemble, args, colocated_orchestrator, db_nodes ):
 
     return ensemble
 
-def add_colocated_orchestrator( ensemble, args ):
+def add_colocated_orchestrator(
+    ensemble,
+    orchestrator_port,
+    orchestrator_interface,
+    limit_app_cpus
+    ):
+
     for model in ensemble:
         model.colocate_db(
-            args.orchestrator_port,
-            ifname=args.orchestrator_interface,
-            limit_app_cpus=False
+            port=orchestrator_port,
+            ifname=orchestrator_interface,
+            limit_app_cpus=limit_app_cpus
         )
 
-def create_distributed_orchestrator( args ):
-    orchestrator = Orchestrator(
-        port = args.orchestrator_port,
-        interface = args.orchestrator_interface,
-        db_nodes = args.orchestrator_nodes,
-        time="1:00:00",
-        threads_per_queue=4,
-        launcher='slurm',
+def create_distributed_orchestrator(
+    exp,
+    orchestrator_port,
+    orchestrator_interface,
+    orchestrator_nodes,
+    orchestrator_node_features,
+    walltime
+    ):
+
+    orchestrator = exp.create_database(
+        port = orchestrator_port,
+        interface = orchestrator_interface,
+        db_nodes = orchestrator_nodes,
+        time=walltime,
+        threads_per_queue=2,
         batch=True)
+
     orchestrator.set_cpus(18)
-    orchestrator.set_batch_arg("constraint", args.orchestrator_node_features)
+    orchestrator.set_batch_arg("constraint", orchestrator_node_features)
     orchestrator.set_batch_arg("exclusive",None)
     return orchestrator
 
-def driver( ensemble_args, orchestrator_args, mom6_args):
-    log_to_file("./driver.log", log_level='developer')
+def mom6_colocated_driver(
+    walltime="02:00:00",
+    ensemble_size=1,
+    nodes_per_member=15,
+    tasks_per_node=17,
+    mom6_exe_path="/lus/cls01029/shao/dev/gfdl/MOM6-examples/build/gnu/"+
+                  "ice_ocean_SIS2/repro/MOM6",
+    ensemble_node_features='P100',
+    mask_table="mask_table.33.16x18",
+    domain_layout="16,18",
+    eke_model_name="ncar_ml_eke.gpu.pt",
+    eke_backend="GPU",
+    orchestrator_port=6780,
+    orchestrator_interface="ipogif0",
+    colocated_stride=18,
+    limit_orchestrator_cpus=False
+    ):
+    """Run a MOM6 OM4_025 simulation using a colocated deployment for online
+    machine-learning inference
 
-    experiment = Experiment("AI-EKE-MOM6", launcher="slurm")
-    mom_ensemble = create_mom_ensemble( experiment, ensemble_args )
+    :param walltime: how long to allocate for the run, "hh:mm:ss"
+    :type walltime: str, optional
+    :param ensemble_size: number of members in the ensemble
+    :type ensemble_size: int, optional
+    :param nodes_per_member: number of nodes allocated to each ensemble member
+    :type nodes_per_member: int, optional
+    :param tasks_per_node: how many MPI ranks to be run per node
+    :type tasks_per_node: int, optional
+    :param mom6_exe_path: full path to the compiled MOM6 executable
+    :type mom6_exe_path: str, optional
+    :param ensemble_node_features: (Slurm-only) Constraints/features for the
+                                    node
+    :type ensemble_node_features: str, optional
+    :param mask_table: the file to use for the specified layout eliminating
+                       land domains
+    :type mask_table: str, optional
+    :param domain_layout: the particular domain decomposition
+    :type domain_layout: str, optional
+    :param eke_model_name: file containing the saved machine-learning model
+    :type eke_model_name: str, optional
+    :param eke_backend: (CPU or GPU), sets whether the ML-EKE model will be
+                        run on CPU or GPU
+    :type eke_backend: str, optional
+    :param orchestrator_port: port that the database will listen on
+    :type orchestrator_port: int, optional
+    :param orchestrator_interface: network interface bound to the orchestrator
+    :type orchestrator_interface: str, optional
+    :param limit_orchestrator_cpus: Limit the number of CPUs that the
+                                    orchestrator can use to handle requests
+    :type limit_orchestrator_cpus: bool, optional
+    """
+    experiment = Experiment("AI-EKE-MOM6", launcher="auto")
+    mom_ensemble = create_mom_ensemble(
+        experiment,
+        walltime,
+        ensemble_size,
+        nodes_per_member,
+        tasks_per_node,
+        mom6_exe_path,
+        ensemble_node_features
+    )
     configure_mom_ensemble(
         mom_ensemble,
-        mom6_args,
-        orchestrator_args.colocated_orchestrator,
-        orchestrator_args.orchestrator_nodes
+        True,
+        False,
+        mask_table,
+        domain_layout,
+        eke_model_name,
+        eke_backend,
+        colocated_stride=colocated_stride)
+
+    add_colocated_orchestrator(
+        mom_ensemble,
+        orchestrator_port,
+        orchestrator_interface,
+        limit_app_cpus=limit_orchestrator_cpus
     )
 
-    experiment_entities = [ mom_ensemble ]
-
-    if args.colocated_orchestrator:
-        add_colocated_orchestrator(mom_ensemble, orchestrator_args)
-    else:
-        orchestrator = create_distributed_orchestrator(orchestrator_args)
-        experiment_entities.append(orchestrator)
-
-    experiment.generate( *experiment_entities, overwrite=True )
-    experiment.start( *experiment_entities, summary=True )
-    print(experiment.summary())
+    experiment.generate( mom_ensemble, overwrite=True )
+    experiment.start( mom_ensemble, summary=True )
     experiment.stop()
 
+def mom6_clustered_driver(
+    walltime="02:00:00",
+    ensemble_size=1,
+    nodes_per_member=25,
+    tasks_per_node=45,
+    mom6_exe_path="/lus/cls01029/shao/dev/gfdl/MOM6-examples/build/gnu/"+
+                  "ice_ocean_SIS2/repro/MOM6",
+    ensemble_node_features='[CL48|SK48|SK56]',
+    mask_table="mask_table.315.32x45",
+    domain_layout="32,45",
+    eke_model_name="ncar_ml_eke.gpu.pt",
+    eke_backend="GPU",
+    orchestrator_port=6780,
+    orchestrator_interface="ipogif0",
+    orchestrator_nodes=3,
+    orchestrator_node_features='P100',
+    configure_only=False
+    ):
+    """Run a MOM6 OM4_025 simulation with a cluster of databases used for
+    machine-learning inference
+
+    :param walltime: how long to allocate for the run, "hh:mm:ss"
+    :type walltime: str, optional
+    :param ensemble_size: number of members in the ensemble
+    :type ensemble_size: int, optional
+    :param nodes_per_member: number of nodes allocated to each ensemble member
+    :type nodes_per_member: int, optional
+    :param tasks_per_node: how many MPI ranks to be run per node
+    :type tasks_per_node: int, optional
+    :param mom6_exe_path: full path to the compiled MOM6 executable
+    :type mom6_exe_path: str, optional
+    :param ensemble_node_features: (Slurm-only) Constraints/features for the
+                                    node
+    :type ensemble_node_features: str, optional
+    :param mask_table: the file to use for the specified layout eliminating
+                       land domains
+    :type mask_table: str, optional
+    :param domain_layout: the particular domain decomposition
+    :type domain_layout: str, optional
+    :param eke_model_name: file containing the saved machine-learning model
+    :type eke_model_name: str, optional
+    :param eke_backend: (CPU or GPU), sets whether the ML-EKE model will be
+                        run on CPU or GPU
+    :type eke_backend: str, optional
+    :param orchestrator_port: port that the database will listen on
+    :type orchestrator_port: int, optional
+    :param orchestrator_interface: network interface bound to the database
+    :type orchestrator_interface: str, optional
+    :param orchestrator_nodes: number of orchestrator nodes to use
+    :type orchestrator_nodes: int, optional
+    :param orchestrator_node_features: (Slurm-only) node features requested for
+                                       the orchestrator nodes
+    :type orchestrator_node_features: str, optional
+    :param configure_only: If True, only configure the experiment and return
+                           the orchestrator and experiment objects
+    :type configure_only: bool, optional
+    """
+
+    experiment = Experiment("AI-EKE-MOM6", launcher="auto")
+    mom_ensemble = create_mom_ensemble(
+        experiment,
+        walltime,
+        ensemble_size,
+        nodes_per_member,
+        tasks_per_node,
+        mom6_exe_path,
+        ensemble_node_features
+     )
+    configure_mom_ensemble(
+        mom_ensemble,
+        False,
+        orchestrator_nodes>=3,
+        mask_table,
+        domain_layout,
+        eke_model_name,
+        eke_backend
+    )
+    orchestrator = create_distributed_orchestrator(
+        experiment,
+        orchestrator_port,
+        orchestrator_interface,
+        orchestrator_nodes,
+        orchestrator_node_features,
+        walltime
+    )
+
+    experiment.generate( mom_ensemble, orchestrator, overwrite=True )
+    if configure_only:
+        return experiment, mom_ensemble, orchestrator
+    else:
+        experiment.start(mom_ensemble, orchestrator, summary=True)
+        experiment.stop(orchestrator)
+
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(
-        description= (
-            "Run MOM6 online inference example using the Slurm launcher. "
-            "The default options will run 12 database nodes with 2432 ranks "
-            "for MOM6."),
-        add_help=False,
-        epilog=(
-            "To run in co-located mode:\n"
-            "python driver.py --colocated_orchestrator --ensemble_node_features='P100'  "
-            "--ppn_per_member=18 --nodes_per_member=16 --orchestrator_interface='lo' "
-            "--mask_table 'MOM_mask_table' --domain_layout '16,18'"
-        )
-    )
-    all_args = set()
-
-    ensemble_group = parser.add_argument_group("Ensemble-related settings")
-    # Ensemble related settings
-    ensemble_group.add_argument(
-        "--ensemble_size",
-        type=int,
-        default=1,
-        help="Number of ensemble members"
-    )
-    ensemble_group.add_argument(
-        "--nodes_per_member",
-        type=int,
-        default=12,
-        help="Number of nodes for each ensemble member"
-    )
-    ensemble_group.add_argument(
-        "--ppn_per_member",
-        type=int,
-        default=40,
-        help="Number of processors per node for each ensemble member"
-    )
-    ensemble_group.add_argument(
-        "--mom6_exe_path",
-        default="/lus/cls01029/shao/dev/gfdl/MOM6-examples/build/gnu/ice_ocean_SIS2/repro/MOM6",
-        type=str,
-        help="Location of the MOM6 executable"
-    )
-    ensemble_group.add_argument(
-        "--ensemble_node_features",
-        type=str,
-        default='CL48',
-        help=(
-            "The node features requested for the simulation model. "
-            "Follows the slurm convention for specifying constraints"
-        )
-    )
-    ensemble_arg_names = set(vars(parser.parse_known_args()[0]).keys()) - all_args
-    all_args = all_args.union(ensemble_arg_names)
-
-    orchestrator_group = parser.add_argument_group("Orchestrator-related settings")
-    orchestrator_group.add_argument("--orchestrator_nodes",
-                        type=int,
-                        default=3,
-                        help="Number of nodes for the database"
-    )
-    orchestrator_group.add_argument("--orchestrator_port",
-                        type=int,
-                        default=6780,
-                        help="Port for the database"
-    )
-    orchestrator_group.add_argument("--orchestrator_interface",
-                        type=str,
-                        default="ipogif0",
-                        help="Network interface for the database"
-    )
-    orchestrator_group.add_argument("--colocated_orchestrator",
-                        action='store_true',
-                        dest='colocated_orchestrator',
-                        help="If present, run the orchestrator in co-located mode"
-    )
-    orchestrator_group.add_argument(
-        "--orchestrator_node_features",
-        type=str,
-        default='P100',
-        help=(
-            "The node features requested for the orchestrator. "
-            "Follows the slurm convention for specifying constraints"
-        )
-    )
-    orchestrator_arg_names = set(vars(parser.parse_known_args()[0]).keys()) - all_args
-    all_args = all_args.union(orchestrator_arg_names)
-
-    mom6_group = parser.add_argument_group("MOM6-related settings")
-    # MOM6 Configuration options
-    mom6_group.add_argument(
-        "--mask_table",
-        type=str,
-        default="mask_table.808.45x72",
-        help=(
-            "The mask table describing the land processor elimination for the "
-            "given layout"
-        )
-    )
-    mom6_group.add_argument(
-        "--domain_layout",
-        type=str,
-        default="45,72",
-        help=(
-            "The domain decomposition to use for MOM6. This must be consistent "
-            "with mask_table"
-        )
-    )
-    mom6_group.add_argument(
-        "--eke_model_name",
-        type=str,
-        default="ncar_ml_eke.gpu.pt",
-        help="The trained machine learning model used for inferring EKE"
-    )
-    mom6_group.add_argument(
-        "--eke_backend",
-        type=str,
-        default="GPU",
-        help="GPU or CPU, the type of device the inference will be done on"
-    )
-    mom6_arg_names = set(vars(parser.parse_known_args()[0]).keys()) - all_args
-    all_args = all_args.union(mom6_arg_names)
-
-    parser.add_argument("-h", "--help",
-       action="help",
-       help="show this help message and exit"
-    )
-    args = parser.parse_args()
-
-    # Parse each of the option groups
-    ensemble_args, orchestrator_args, mom6_args = (
-        argparse.Namespace(**dict((k,v) for k,v in vars(args).items() if k in arg_group))
-        for arg_group in [ensemble_arg_names, orchestrator_arg_names, mom6_arg_names])
-
-    driver( ensemble_args, orchestrator_args, mom6_args )
-
-
-
+    import fire
+    log_to_file("./driver.log", log_level='developer')
+    fire.Fire({
+        "colocated":mom6_colocated_driver,
+        "clustered":mom6_clustered_driver
+    })
