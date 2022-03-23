@@ -72,7 +72,7 @@ def configure_mom_ensemble(
     ):
 
     MOM6_config_options = {
-        "SIM_DAYS": 1, # length of simlations
+        "SIM_DAYS": 15, # length of simlations
         "EKE_MODEL": eke_model_name,
         "EKE_BACKEND": eke_backend,
         "DOMAIN_LAYOUT": domain_layout,
@@ -103,6 +103,7 @@ def add_colocated_orchestrator(
     ensemble,
     orchestrator_port,
     orchestrator_interface,
+    orchestrator_cpus,
     limit_app_cpus
     ):
 
@@ -110,6 +111,7 @@ def add_colocated_orchestrator(
         model.colocate_db(
             port=orchestrator_port,
             ifname=orchestrator_interface,
+            db_cpus=orchestrator_cpus,
             limit_app_cpus=limit_app_cpus
         )
 
@@ -150,6 +152,7 @@ def mom6_colocated_driver(
     orchestrator_port=6780,
     orchestrator_interface="ipogif0",
     colocated_stride=18,
+    orchestrator_cpus=4,
     limit_orchestrator_cpus=False
     ):
     """Run a MOM6 OM4_025 simulation using a colocated deployment for online
@@ -182,6 +185,9 @@ def mom6_colocated_driver(
     :type orchestrator_port: int, optional
     :param orchestrator_interface: network interface bound to the orchestrator
     :type orchestrator_interface: str, optional
+    :param orchestrator_cpus: Specify the number of cores that the
+                                    orchestrator can use to handle requests
+    :type orchestrator_cpus: int, optional
     :param limit_orchestrator_cpus: Limit the number of CPUs that the
                                     orchestrator can use to handle requests
     :type limit_orchestrator_cpus: bool, optional
@@ -210,7 +216,8 @@ def mom6_colocated_driver(
         mom_ensemble,
         orchestrator_port,
         orchestrator_interface,
-        limit_app_cpus=limit_orchestrator_cpus
+        orchestrator_cpus,
+        limit_orchestrator_cpus,
     )
 
     experiment.generate( mom_ensemble, overwrite=True )
