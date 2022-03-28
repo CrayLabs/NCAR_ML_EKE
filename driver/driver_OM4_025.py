@@ -319,7 +319,7 @@ def mom6_clustered_driver(
 
 if __name__ == "__main__":
     import fire
-    log_to_file("./driver.log", log_level='developer')
+    log_to_file("./mom6_driver.log", log_level='info')
     fire.Fire({
         "colocated":mom6_colocated_driver,
         "clustered":mom6_clustered_driver
